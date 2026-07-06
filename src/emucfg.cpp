@@ -99,6 +99,9 @@ namespace Plus4Emu {
     defineConfigurationVariable(*this, "vm.sidOutputVolume",
                                 vm.sidOutputVolume, int(0),
                                 vmConfigurationChanged, -8.0, 2.0);
+    defineConfigurationVariable(*this, "vm.oplOutputVolume",
+                                vm.oplOutputVolume, int(0),
+                                vmConfigurationChanged, -8.0, 2.0);
     defineConfigurationVariable(*this, "vm.processPriority",
                                 vm.processPriority, int(0),
                                 vmProcessPriorityChanged,
@@ -416,6 +419,7 @@ namespace Plus4Emu {
                               | (uint8_t(vm.sidRegistersC64) << 1)
                               | (uint8_t(vm.sidClockC64) << 2),
                               vm.sidDigiBlaster, vm.sidOutputVolume);
+      vm_.setOPL2Configuration(vm.oplOutputVolume);
       vmConfigurationChanged = false;
     }
     if (vmProcessPriorityChanged) {

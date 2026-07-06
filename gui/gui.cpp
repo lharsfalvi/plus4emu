@@ -691,6 +691,10 @@ void Plus4EmuGUI::createMenus()
                    (char *) 0, &menuCallback_Machine_EnableSID, (void *) this);
   mainMenuBar->add("Machine/SID emulation/Disable",
                    (char *) 0, &menuCallback_Machine_DisableSID, (void *) this);
+  mainMenuBar->add("Machine/YM3812 (OPL2) emulation/Enable",
+                   (char *) 0, &menuCallback_Machine_EnableOPL2, (void *) this);
+  mainMenuBar->add("Machine/YM3812 (OPL2) emulation/Disable",
+                   (char *) 0, &menuCallback_Machine_DisableOPL2, (void *) this);
   mainMenuBar->add("Machine/Toggle pause (F10)",
                    (char *) 0, &menuCallback_Machine_Pause, (void *) this);
   mainMenuBar->add("Machine/Configure... (Shift+F10)",
@@ -2598,6 +2602,34 @@ void Plus4EmuGUI::menuCallback_Machine_DisableSID(Fl_Widget *o, void *v)
   if (gui_.lockVMThread()) {
     try {
       gui_.vm.disableSIDEmulation();
+    }
+    catch (...) {
+    }
+    gui_.unlockVMThread();
+  }
+}
+
+void Plus4EmuGUI::menuCallback_Machine_EnableOPL2(Fl_Widget *o, void *v)
+{
+  (void) o;
+  Plus4EmuGUI&  gui_ = *(reinterpret_cast<Plus4EmuGUI *>(v));
+  if (gui_.lockVMThread()) {
+    try {
+      gui_.vm.writeMemory(0x0010FDE4U, 0x00, false);
+    }
+    catch (...) {
+    }
+    gui_.unlockVMThread();
+  }
+}
+
+void Plus4EmuGUI::menuCallback_Machine_DisableOPL2(Fl_Widget *o, void *v)
+{
+  (void) o;
+  Plus4EmuGUI&  gui_ = *(reinterpret_cast<Plus4EmuGUI *>(v));
+  if (gui_.lockVMThread()) {
+    try {
+      gui_.vm.disableOPL2Emulation();
     }
     catch (...) {
     }

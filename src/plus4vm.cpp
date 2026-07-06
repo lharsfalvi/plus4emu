@@ -29,6 +29,7 @@
 #include <typeinfo>
 
 #include "resid/sid.hpp"
+#include "ym3812.hpp"
 #include "p4floppy.hpp"
 #include "mps801.hpp"
 #include "vc1526.hpp"
@@ -86,6 +87,10 @@ namespace Plus4 {
       setMemoryReadCallback(uint16_t(0xFE80) + i, &sidRegisterRead);
       setMemoryWriteCallback(uint16_t(0xFE80) + i, &sidRegisterWrite);
     }
+    setMemoryReadCallback(0xFDE4, &oplRegisterRead);
+    setMemoryWriteCallback(0xFDE4, &oplRegisterWrite);
+    setMemoryReadCallback(0xFDE5, &oplRegisterRead);
+    setMemoryWriteCallback(0xFDE5, &oplRegisterWrite);
     for (uint16_t i = 0xFEC0; i <= 0xFEFF; i++) {
       setMemoryReadCallback(i, &parallelIECRead);
       setMemoryWriteCallback(i, &parallelIECWrite);
@@ -105,7 +110,12 @@ namespace Plus4 {
       tmp = int32_t((uint32_t(tmp * vm.sidOutputVolume)
                      + uint32_t(0x80004000UL)) >> 15) - int32_t(65536);
     }
-    vm.soundOutputSignal = tmp + int32_t(sampleValue);
+    int32_t oplTmp = 0;
+    if (vm.oplEnabled) {
+      oplTmp = int32_t((uint32_t(vm.ym3812_->tick() * vm.oplOutputVolume)
+                        + uint32_t(0x80004000UL)) >> 15) - int32_t(65536);
+    }
+    vm.soundOutputSignal = tmp + oplTmp + int32_t(sampleValue);
     vm.sendMonoAudioOutput(vm.soundOutputSignal);
   }
 
@@ -192,6 +202,25 @@ namespace Plus4 {
     // SID register write at $D400-$D41F, also store the data in RAM
     TED7360::write_memory_C000_to_FCFF(userData, addr, value);
     Plus4VM::TED7360_::sidRegisterWrite(userData, addr, value);
+  }
+
+  PLUS4EMU_REGPARM2 uint8_t Plus4VM::TED7360_::oplRegisterRead(
+      void *userData, uint16_t addr)
+  {
+    TED7360_& ted = *(reinterpret_cast<TED7360_ *>(userData));
+    if (ted.vm.oplEnabled)
+      ted.dataBusState = ted.vm.ym3812_->read(addr);
+    return ted.dataBusState;
+  }
+
+  PLUS4EMU_REGPARM3 void Plus4VM::TED7360_::oplRegisterWrite(
+      void *userData, uint16_t addr, uint8_t value)
+  {
+    TED7360_& ted = *(reinterpret_cast<TED7360_ *>(userData));
+    ted.dataBusState = value;
+    if (PLUS4EMU_UNLIKELY(!ted.vm.oplEnabled))
+      ted.vm.oplEnabled = true;
+    ted.vm.ym3812_->write(addr, value);
   }
 
   PLUS4EMU_REGPARM2 uint8_t Plus4VM::TED7360_::parallelIECRead(
@@ -413,6 +442,7 @@ namespace Plus4 {
     if ((singleClockFreq >> 2) != soundClockFrequency) {
       soundClockFrequency = singleClockFreq >> 2;
       setAudioConverterSampleRate(float(long(soundClockFrequency)));
+      ym3812_->setSoundClockFrequency(uint32_t(soundClockFrequency));
       if (videoCapture)
         videoCapture->setClockFrequency(soundClockFrequency << 3);
     }
@@ -831,6 +861,9 @@ namespace Plus4 {
       digiBlasterOutput(0x80),
       sidCycleCnt(4),
       sidFlags(0),
+      ym3812_((YM3812 *) 0),
+      oplOutputVolume(32768),
+      oplEnabled(false),
       is1541HighAccuracy(true),
       serialBusDelayOffset(0),
       floppyROM_1541((uint8_t *) 0),
@@ -873,6 +906,7 @@ namespace Plus4 {
       sid_->set_chip_model(MOS8580);
       sid_->enable_external_filter(false);
       sid_->reset();
+      ym3812_ = new YM3812();
       iecDrive8 = new ParallelIECDrive(8);
       iecDrive9 = new ParallelIECDrive(9);
       ted = new TED7360_(*this);
@@ -892,6 +926,8 @@ namespace Plus4 {
         delete iecDrive8;
       if (iecDrive9)
         delete iecDrive9;
+      if (ym3812_)
+        delete ym3812_;
       delete sid_;
       throw;
     }
@@ -932,6 +968,7 @@ namespace Plus4 {
     delete iecDrive8;
     delete iecDrive9;
     delete sid_;
+    delete ym3812_;
     if (videoBreakPoints)
       delete[] videoBreakPoints;
   }
@@ -979,10 +1016,12 @@ namespace Plus4 {
     sid_->reset();
     digiBlasterOutput = 0x80;
     sid_->input(0);
+    ym3812_->reset();
     if (isColdReset) {
       sidEnabled = false;
       ted->setCallback(&SID::clockCallback, sid_, 0);
       ted->setCallback(&sidCallbackC64, this, 0);
+      oplEnabled = false;
       disableUnusedFloppyDrives();
     }
     resetFloppyDrive(-1);
@@ -1206,6 +1245,27 @@ namespace Plus4 {
       sidEnabled = false;
       ted->setCallback(&SID::clockCallback, sid_, 0);
       ted->setCallback(&sidCallbackC64, this, 0);
+    }
+  }
+
+  void Plus4VM::setOPL2Configuration(int outputVolume)
+  {
+    // unlike SID's raw accumulator (which sums several un-averaged, full
+    // scale reSID cycles and therefore needs a much larger divisor),
+    // YM3812::tick() already returns an appropriately scaled (roughly
+    // 16 bit range) sample, so 0 dB should correspond to a unity (32768,
+    // i.e. 1.0 in the 17.15 fixed point format used below) gain factor
+    oplOutputVolume =
+        int32_t(std::pow(10.0, double(outputVolume) * 0.05) * 32768.0 + 0.5);
+  }
+
+  void Plus4VM::disableOPL2Emulation()
+  {
+    if (oplEnabled) {
+      stopDemoPlayback();
+      stopDemoRecording(false);
+      ym3812_->reset();
+      oplEnabled = false;
     }
   }
 
@@ -2351,10 +2411,11 @@ namespace Plus4 {
   {
     ted->saveState(f);
     sid_->saveState(f);
+    ym3812_->saveState(f);
     {
       Plus4Emu::File::Buffer  buf;
       buf.setPosition(0);
-      buf.writeUInt32(0x01000004);      // version number
+      buf.writeUInt32(0x01000005);      // version number
       buf.writeUInt32(uint32_t(cpuClockFrequency));
       buf.writeUInt32(uint32_t(tedInputClockFrequency));
       buf.writeUInt32(uint32_t(soundClockFrequency));
@@ -2363,6 +2424,7 @@ namespace Plus4 {
       buf.writeByte(sidCycleCnt);
       buf.writeBoolean(digiBlasterEnabled);
       buf.writeByte(digiBlasterOutput);
+      buf.writeBoolean(oplEnabled);
       buf.writeBoolean(aciaEnabled);
       buf.writeBoolean(aciaCallbackFlag);
       buf.writeInt64(aciaTimeRemaining);
@@ -2451,7 +2513,7 @@ namespace Plus4 {
     buf.setPosition(0);
     // check version number
     unsigned int  version = buf.readUInt32();
-    if (!(version >= 0x01000000 && version <= 0x01000004)) {
+    if (!(version >= 0x01000000 && version <= 0x01000005)) {
       buf.setPosition(buf.getDataSize());
       throw Plus4Emu::Exception("incompatible plus4 snapshot format");
     }
@@ -2487,6 +2549,7 @@ namespace Plus4 {
         digiBlasterEnabled = false;
         digiBlasterOutput = 0x80;
       }
+      oplEnabled = (version >= 0x01000005 && buf.readBoolean());
       if (sidFlags & 1)
         sid_->set_chip_model(MOS6581);
       else
@@ -2681,6 +2744,7 @@ namespace Plus4 {
     }
     ted->registerChunkTypes(f);
     sid_->registerChunkType(f);
+    ym3812_->registerChunkType(f);
   }
 
 }       // namespace Plus4

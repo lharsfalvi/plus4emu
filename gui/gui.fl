@@ -179,6 +179,8 @@ class Plus4EmuGUI {open
   decl {static void menuCallback_Machine_ResetAll(Fl_Widget *o, void *v);} {}
   decl {static void menuCallback_Machine_EnableSID(Fl_Widget *o, void *v);} {}
   decl {static void menuCallback_Machine_DisableSID(Fl_Widget *o, void *v);} {}
+  decl {static void menuCallback_Machine_EnableOPL2(Fl_Widget *o, void *v);} {}
+  decl {static void menuCallback_Machine_DisableOPL2(Fl_Widget *o, void *v);} {}
   decl {static void menuCallback_Machine_EnableLP(Fl_Widget *o, void *v);} {}
   decl {static void menuCallback_Machine_QuickCfgL1(Fl_Widget *o, void *v);} {}
   decl {static void menuCallback_Machine_QuickCfgL2(Fl_Widget *o, void *v);} {}

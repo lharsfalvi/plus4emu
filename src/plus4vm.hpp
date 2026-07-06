@@ -35,6 +35,7 @@ namespace Plus4Emu {
 namespace Plus4 {
 
   class SID;
+  class YM3812;
   class ParallelIECDrive;
 
   class Plus4VM : public Plus4Emu::VirtualMachine {
@@ -47,6 +48,10 @@ namespace Plus4 {
       static PLUS4EMU_REGPARM3 void sidRegisterWrite(
           void *userData, uint16_t addr, uint8_t value);
       static PLUS4EMU_REGPARM3 void sidRegisterWriteC64(
+          void *userData, uint16_t addr, uint8_t value);
+      static PLUS4EMU_REGPARM2 uint8_t oplRegisterRead(
+          void *userData, uint16_t addr);
+      static PLUS4EMU_REGPARM3 void oplRegisterWrite(
           void *userData, uint16_t addr, uint8_t value);
       static PLUS4EMU_REGPARM2 uint8_t parallelIECRead(
           void *userData, uint16_t addr);
@@ -119,6 +124,9 @@ namespace Plus4 {
     // bit 1 = enable write access at $D400-$D41F
     // bit 2 = run SID emulation at C64 clock frequency
     uint8_t   sidFlags;
+    YM3812    *ym3812_;
+    int32_t   oplOutputVolume;
+    bool      oplEnabled;
     bool      is1541HighAccuracy;
     int16_t   serialBusDelayOffset;
     SerialDevice  *serialDevices[12];
@@ -252,6 +260,15 @@ namespace Plus4 {
      * any of the SID registers) to reduce CPU usage.
      */
     virtual void disableSIDEmulation();
+    /*!
+     * Set YM3812 (OPL2) emulation output volume, in decibels (-8 to +2).
+     */
+    virtual void setOPL2Configuration(int outputVolume);
+    /*!
+     * Disable YM3812 (OPL2) emulation (which is automatically enabled by
+     * writing to either of the two OPL2 registers) to reduce CPU usage.
+     */
+    virtual void disableOPL2Emulation();
     /*!
      * Set state of key 'keyCode' (0 to 127).
      */

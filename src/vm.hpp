@@ -221,6 +221,15 @@ namespace Plus4Emu {
      */
     virtual void disableSIDEmulation();
     /*!
+     * Set YM3812 (OPL2) emulation output volume, in decibels (-8 to +2).
+     */
+    virtual void setOPL2Configuration(int outputVolume);
+    /*!
+     * Disable YM3812 (OPL2) emulation (which is automatically enabled by
+     * writing to either of the two OPL2 registers) to reduce CPU usage.
+     */
+    virtual void disableOPL2Emulation();
+    /*!
      * Set state of key 'keyCode' (0 to 127).
      */
     virtual void setKeyboardState(int keyCode, bool isPressed);

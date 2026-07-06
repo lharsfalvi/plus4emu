@@ -27,7 +27,12 @@ if buildRelease:
         compilerFlags = ' -march=pentium2 '
 if enableDebug and not buildRelease:
     compilerFlags = ' -Wno-long-long -Wshadow -g -O0 ' + compilerFlags
-    compilerFlags = ' -Wall -W -ansi -pedantic ' + compilerFlags
+    # NOTE: '-ansi' (C++98) is intentionally not used here (unlike older
+    # versions of this file) because the vendored ymfm library (used for
+    # YM3812/OPL2 emulation) requires C++14; the C++ standard version is set
+    # explicitly via CXXFLAGS below instead, which does not affect the C
+    # compiler (used for the vendored dotconf library)
+    compilerFlags = ' -Wall -W -pedantic ' + compilerFlags
 else:
     compilerFlags = ' -Wall -O3 ' + compilerFlags + ' -mtune=generic '
     compilerFlags = compilerFlags + ' -fno-inline-functions '
@@ -152,6 +157,10 @@ else:
 if linux32CrossCompile:
     compilerFlags = ' -m32 ' + compilerFlags
 plus4emuLibEnvironment.Append(CCFLAGS = Split(compilerFlags))
+# the vendored ymfm library (YM3812/OPL2 emulation) requires C++14; using
+# CXXFLAGS (rather than CCFLAGS) keeps this from being passed to the C
+# compiler, which is also used to build the vendored dotconf library
+plus4emuLibEnvironment.Append(CXXFLAGS = ['-std=c++14'])
 plus4emuLibEnvironment.Append(CPPPATH = ['.', './src'])
 if userFlags:
     plus4emuLibEnvironment.MergeFlags(userFlags)
@@ -328,6 +337,7 @@ plus4emuLibSources = Split('''
     src/plus4vm.cpp
     src/vm.cpp
     src/acia6551.cpp
+    src/ym3812.cpp
     src/bplist.cpp
     src/cia8520.cpp
     src/d64image.cpp
@@ -392,6 +402,21 @@ residLib = residLibEnvironment.StaticLibrary('resid', residLibSources)
 
 # -----------------------------------------------------------------------------
 
+ymfmLibEnvironment = plus4emuLibEnvironment.Clone()
+ymfmLibEnvironment.Append(CPPPATH = ['./ymfm'])
+# (the -std=c++14 flag needed to compile ymfm is already set on
+# plus4emuLibEnvironment's CXXFLAGS, and inherited via Clone() above)
+
+ymfmLibSources = Split('''
+    ymfm/ymfm_opl.cpp
+    ymfm/ymfm_adpcm.cpp
+    ymfm/ymfm_pcm.cpp
+''')
+
+ymfmLib = ymfmLibEnvironment.StaticLibrary('ymfm', ymfmLibSources)
+
+# -----------------------------------------------------------------------------
+
 def fixDefFile(env, target, source):
     f = open('plus4lib/plus4emu.def', 'rb')
     s = []
@@ -415,11 +440,12 @@ if mingwCrossCompile or sys.platform[:5] == 'linux':
         plus4emuDLLEnvironment.Append(LIBS = ['pthread'])
         plus4emuDLL = plus4emuDLLEnvironment.SharedLibrary(
             'plus4lib/plus4emu',
-            plus4emuLibSources + residLibSources + ['plus4lib/plus4api.cpp'])
+            plus4emuLibSources + residLibSources + ymfmLibSources
+            + ['plus4lib/plus4api.cpp'])
     else:
         plus4emuDLLEnvironment.Prepend(
             LINKFLAGS = ['-mwindows', '-Wl,--output-def,plus4lib/plus4emu.def'])
-        plus4emuDLLEnvironment.Prepend(LIBS = ['plus4emu', 'resid'])
+        plus4emuDLLEnvironment.Prepend(LIBS = ['plus4emu', 'resid', 'ymfm'])
         plus4emuDLLEnvironment['SHLIBPREFIX'] = ''
         plus4emuDLLEnvironment['SHLIBSUFFIX'] = ''
         plus4emuDLL = plus4emuDLLEnvironment.SharedLibrary(
@@ -429,12 +455,13 @@ if mingwCrossCompile or sys.platform[:5] == 'linux':
                                        fixDefFile)
     Depends(plus4emuDLL, plus4emuLib)
     Depends(plus4emuDLL, residLib)
+    Depends(plus4emuDLL, ymfmLib)
 
 # -----------------------------------------------------------------------------
 
 plus4emuEnvironment = plus4emuGLGUIEnvironment.Clone()
 plus4emuEnvironment.Append(CPPPATH = ['./gui'])
-plus4emuEnvironment.Prepend(LIBS = ['plus4emu', 'resid'])
+plus4emuEnvironment.Prepend(LIBS = ['plus4emu', 'resid', 'ymfm'])
 
 plus4emuSources = ['gui/gui.cpp']
 plus4emuSources += fluidCompile(['gui/gui.fl', 'gui/disk_cfg.fl',
@@ -456,6 +483,7 @@ if mingwCrossCompile:
 plus4emu = plus4emuEnvironment.Program('plus4emu', plus4emuSources)
 Depends(plus4emu, plus4emuLib)
 Depends(plus4emu, residLib)
+Depends(plus4emu, ymfmLib)
 
 if sys.platform[:6] == 'darwin':
     Command('plus4emu.app/Contents/MacOS/plus4emu', 'plus4emu',

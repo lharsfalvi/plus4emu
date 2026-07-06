@@ -317,6 +317,15 @@ namespace Plus4Emu {
   {
   }
 
+  void VirtualMachine::setOPL2Configuration(int outputVolume)
+  {
+    (void) outputVolume;
+  }
+
+  void VirtualMachine::disableOPL2Emulation()
+  {
+  }
+
   void VirtualMachine::setKeyboardState(int keyCode, bool isPressed)
   {
     (void) keyCode;

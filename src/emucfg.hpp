@@ -46,6 +46,7 @@ namespace Plus4Emu {
       unsigned int  speedPercentage;    // NOTE: this uses soundSettingsChanged
       int           serialBusDelayOffset;
       int           sidOutputVolume;
+      int           oplOutputVolume;
       int           processPriority;    // uses vmProcessPriorityChanged
       bool          enableACIA;
       bool          sidModel6581;
