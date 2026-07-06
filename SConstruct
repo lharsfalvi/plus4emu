@@ -86,8 +86,7 @@ def configurePackage(env, pkgName):
                 print('Checking for package ' + s + '...', end = ' ')
                 s = ' ' + s
             try:
-                if not env.ParseConfig(packageConfigs[pkgName][0] + s):
-                    raise Exception()
+                env.ParseConfig(packageConfigs[pkgName][0] + s)
                 print('yes')
                 if not s:
                     env['CCFLAGS'] = savedCFlags
